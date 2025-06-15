@@ -7,6 +7,39 @@ This repository provides a guide and resources for integrating Keycloak as an id
 - **Kubernetes**: Container orchestration platform.
 - **OIDC**: OpenID Connect, a protocol for authenticating users with Keycloak.
 
+## Steps to Install Keycloak on Kubernetes Using keycloak-values.yaml
+
+1. **Add the Bitnami Helm repository:**
+   ```bash
+   helm repo add bitnami https://charts.bitnami.com/bitnami
+   helm repo update
+   ```
+2. **Create a namespace for Keycloak (optional):**
+   ```bash
+   kubectl create namespace keycloak
+   ```
+3. **Install Keycloak using your custom values file:**
+   ```bash
+   helm install keycloak bitnami/keycloak \
+     --namespace keycloak \
+     --values ~/keycloak-values.yaml
+   ```
+   - Ensure your `keycloak-values.yaml` file is present in your home directory and contains your desired configuration.
+4. **Check the status of the deployment:**
+   ```bash
+   kubectl get pods -n keycloak
+   ```
+5. **Access Keycloak:**
+   - Get the service details:
+     ```bash
+     kubectl get svc -n keycloak
+     ```
+   - Use port-forwarding to access the Keycloak UI locally:
+     ```bash
+     kubectl port-forward svc/keycloak 8080:8080 -n keycloak
+     ```
+   - Open [http://localhost:8080](http://localhost:8080) in your browser.
+
 ## Steps to Configure Keycloak with Kubernetes
 
 ### 1. Deploy Keycloak
