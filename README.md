@@ -2,6 +2,13 @@
 
 This repository provides a guide and resources for integrating Keycloak as an identity provider to manage access to your Kubernetes cluster. By using Keycloak, you can enable Single Sign-On (SSO), centralized user management, and fine-grained access control for Kubernetes.
 
+## Prerequisites
+- Ensure you have the [kubectl oidc-login plugin](https://github.com/int128/kubelogin) installed. This plugin is required for OIDC authentication with Kubernetes. You can install it using:
+  ```bash
+  kubectl krew install oidc-login
+  ```
+  Or follow the instructions in the [kubelogin documentation](https://github.com/int128/kubelogin).
+
 ## Overview
 - **Keycloak**: Open-source Identity and Access Management (IAM) solution.
 - **Kubernetes**: Container orchestration platform.
@@ -22,9 +29,9 @@ This repository provides a guide and resources for integrating Keycloak as an id
    ```bash
    helm install keycloak bitnami/keycloak \
      --namespace keycloak \
-     --values ~/keycloak-values.yaml
+     --values keycloak-values.yaml
    ```
-   - Ensure your `keycloak-values.yaml` file is present in your home directory and contains your desired configuration.
+   - Ensure your `keycloak-values.yaml` file is present in your directory and contains your desired configuration.
 4. **Check the status of the deployment:**
    ```bash
    kubectl get pods -n keycloak
@@ -50,7 +57,19 @@ This repository provides a guide and resources for integrating Keycloak as an id
 - In Keycloak, create a new client (e.g., `kubernetes`) with:
   - Client Protocol: `openid-connect`
   - Access Type: `confidential` or `public`
-  - Valid Redirect URIs: `https://<k8s-api-server>/oauth2/callback`
+  - Client authentication Enabled: ✅ Yes
+  - Standard Flow Enabled: ✅ Yes
+  - Direct access grants Enabled: ✅ Yes
+  - Valid Redirect URIs: `http://localhost:8000`
+  - Add client scope called groups
+  - Add a Mapper to this client scope:
+      Name: groups
+      Mapper Type: Group Membership
+      Token Claim Name: groups
+      Full group path: ❌
+      Add to ID token: ✅
+      Add to access token: ✅
+      Add to userinfo: ✅
 - Note the client ID and secret (if confidential).
 
 ### 3. Create Users and Groups
@@ -62,46 +81,52 @@ This repository provides a guide and resources for integrating Keycloak as an id
   ```
   --oidc-issuer-url=https://<keycloak-domain>/realms/<realm-name>
   --oidc-client-id=<client-id>
-  --oidc-username-claim=preferred_username
+  --oidc-username-claim=email
   --oidc-groups-claim=groups
   --oidc-ca-file=/etc/kubernetes/pki/ca.crt
   ```
+  The ca.crt is the ca used to sign the certificate of the keycloak
 - Restart the API server after making changes.
 
 ### 5. Generate kubeconfig for Users
-- Use `kubectl` or a script to generate kubeconfig files for users, referencing Keycloak as the OIDC provider.
+- Use `kubectl oidc-login` or a script to generate kubeconfig files for users, referencing Keycloak as the OIDC provider.
 - Example:
   ```yaml
   users:
   - name: keycloak-user
     user:
-      auth-provider:
-        name: oidc
-        config:
-          client-id: <client-id>
-          client-secret: <client-secret>
-          id-token: <user-id-token>
-          idp-issuer-url: https://<keycloak-domain>/realms/<realm-name>
-          refresh-token: <user-refresh-token>
+      exec:
+        apiVersion: client.authentication.k8s.io/v1
+        args:
+        - oidc-login
+        - get-token
+        - --oidc-issuer-url=https://keycloak.docker.internal/auth/realms/devops
+        - --oidc-client-id=kubernetes
+        - --oidc-extra-scope=groups email openid
+        - --oidc-client-secret=CLIENT SECRET
+        - --insecure-skip-tls-verify
+        command: kubectl
+        env: null
+        provideClusterInfo: false
+        interactiveMode: Never
   ```
 
 ### 6. RBAC in Kubernetes
 - Use Kubernetes Role-Based Access Control (RBAC) to grant permissions to users and groups from Keycloak.
 - Example:
   ```yaml
-  kind: RoleBinding
+  kind: ClusterRoleBinding
   apiVersion: rbac.authorization.k8s.io/v1
   metadata:
-    name: dev-access
-    namespace: development
+    name: oidc-admin
+  roleRef:
+    apiGroup: rbac.authorization.k8s.io
+    kind: ClusterRole
+    name: cluster-admin
   subjects:
   - kind: Group
-    name: dev-team
-    apiGroup: rbac.authorization.k8s.io
-  roleRef:
-    kind: Role
-    name: developer
-    apiGroup: rbac.authorization.k8s.io
+    name: k8s-admin
+
   ```
 
 ## References
@@ -110,5 +135,3 @@ This repository provides a guide and resources for integrating Keycloak as an id
 - [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
 
 ---
-
-Feel free to contribute improvements or additional resources!
